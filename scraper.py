@@ -10,51 +10,70 @@ def scrape_site(url):
                       "Chrome/115.0 Safari/537.36"
     }
 
-    page_to_scrap = requests.get(url, headers=headers, timeout=10)
-    soup = BeautifulSoup(page_to_scrap.text, "html.parser")
+    response = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    headLines = soup.findAll("li", attrs={"class": "contentlist_article__TSSz5"})
+    # Adjust these selectors if the HTML structure differs, but often it's consistent
+    headLines = soup.find_all("li", attrs={"class": "contentlist_article__TSSz5"})
 
     details = []
     for headline in headLines:
         title_tag = headline.find("a", attrs={"class": "contentlist_title__GRPR1"})
         if title_tag:
-            title = title_tag.text.strip()
+            title = title_tag.get_text(strip=True)
             link = title_tag.get("href", "")
-            full_link = link if link.startswith("http") else "https://www.cbc.ca" + link
+            full_link = link if link.startswith("http") else f"https://www.cbc.ca{link}"
 
-            # fetch article page to get author
-            author = scrape_author(full_link, headers)
-
-            details.append({"TITLE": title, "LINK": full_link, "AUTHOR": author})
-            print(title, "-", full_link, "-", author)
+            author, pub_date, summary = scrape_article_details(full_link, headers)
+            details.append({
+                "TITLE": title,
+                "LINK": full_link,
+                "AUTHOR": author,
+                "PUBLISHED_DATE": pub_date,
+                "SUMMARY": summary
+            })
+            print(f"{title} — {full_link} — {author} — {pub_date}")
 
     return details
 
 
-def scrape_author(article_url, headers):
-    """Fetch the author name from the article page"""
+def scrape_article_details(article_url, headers):
     page = requests.get(article_url, headers=headers, timeout=10)
     soup = BeautifulSoup(page.text, "html.parser")
 
-    author_tag = soup.find("span", attrs={"class": "byline__name"})
-    if author_tag:
-        return author_tag.text.strip()
-    return "N/A"
+    # Try multiple methods to locate author
+    author_tag = soup.find("a", class_="byline_authorLink__ML5rs")
+    if not author_tag:
+        author_tag = soup.find("meta", attrs={"name": "author"})
+
+    author = (author_tag.get_text(strip=True) if author_tag and hasattr(author_tag, "get_text")
+              else (author_tag.get("content", "").strip() if author_tag else "N/A"))
+
+    # Published date
+    date_tag = soup.find("meta", attrs={"property": "article:published_time"})
+    pub_date = date_tag.get("content", "") if date_tag else "N/A"
+
+    # Summary or description
+    desc_tag = soup.find("meta", attrs={"name": "description"})
+    summary = desc_tag.get("content", "").strip() if desc_tag else "N/A"
+
+    return author, pub_date, summary
 
 
-def save_json(data, path="details.json"):
+def save_json(data, path="details_latest.json"):
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def save_csv(data, path="details.csv"):
+def save_csv(data, path="details_latest.csv"):
     with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["TITLE", "LINK", "AUTHOR"])
+        writer = csv.DictWriter(f, fieldnames=["TITLE", "LINK", "AUTHOR", "PUBLISHED_DATE", "SUMMARY"])
         writer.writeheader()
         writer.writerows(data)
 
 
-scrape = scrape_site("https://www.cbc.ca/lite/news?sort=editors-picks")
-save_json(scrape)
-save_csv(scrape)
+if __name__ == "__main__":
+    url = "https://www.cbc.ca/lite/news?sort=latest"
+    scraped_data = scrape_site(url)
+    save_json(scraped_data, path="details_latest.json")
+    save_csv(scraped_data, path="details_latest.csv")
