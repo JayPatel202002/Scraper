@@ -1,0 +1,103 @@
+# Scraper Module Documentation
+
+This module follows a clean architecture pattern with clear separation of concerns. Each file has a single responsibility.
+
+## File Structure
+
+```
+scraper/
+├── __init__.py          # Package initialization
+├── runner.py            # Orchestration and workflow control
+├── config.py            # Configuration and tunables
+├── fetch.py             # Content retrieval
+├── parse.py             # Data extraction
+├── store.py             # Data persistence
+├── models.py            # Data contracts and types
+├── exceptions.py        # Custom error classes
+└── utils.py             # Shared utility functions
+```
+
+## File Descriptions
+
+### `__init__.py`
+Package initialization file that makes the scraper directory a Python package. Exports the main components for easy importing.
+
+### `runner.py`
+**Single responsibility: Orchestration**
+
+- Accepts URLs or jobs from the parent application
+- Controls concurrency and parallel execution
+- Orchestrates the scraping workflow: calls `fetch` → `parse` → `store`
+- Handles retries and failures
+- **Does NOT contain:** scraping logic or parsing logic
+
+### `config.py`
+**All tunables live here**
+
+- Timeouts configuration
+- Concurrency limits
+- Retry counts and strategies
+- Feature flags (e.g., use Playwright or not)
+- Keeps the scraper configurable without touching core logic
+
+### `fetch.py`
+**Responsibility: Getting content**
+
+- Contains Playwright logic for dynamic content
+- Optional HTTP fetch for static content
+- Returns raw content only (HTML, JSON, etc.)
+- **Does NOT contain:** BeautifulSoup, business logic, or parsing
+
+### `parse.py`
+**Responsibility: Extraction only**
+
+- Contains BeautifulSoup logic for HTML parsing
+- Knows nothing about Playwright or networking
+- Converts raw HTML → structured data
+- **Does NOT contain:** retries or networking logic
+- Designed to be easily testable in isolation
+
+### `store.py`
+**Responsibility: Persistence**
+
+- Database insert operations
+- File write operations (CSV, JSON, etc.)
+- Queue push operations
+- Can simply return data to parent app
+- This is where you integrate with the larger application
+
+### `models.py`
+**Lightweight data contracts**
+
+Defines data models and type hints:
+- `RawPage` - Represents raw fetched content
+- `ParsedItem` - Represents extracted structured data
+- `ScrapeResult` - Represents the final result
+- Prevents silent None issues and provides type safety
+
+### `exceptions.py`
+**Custom, explicit errors**
+
+Defines custom exception classes:
+- `FetchError` - Errors during content retrieval
+- `ParseError` - Errors during data extraction
+- `RetryableError` - Errors that can be retried
+- Avoids catching generic `Exception` everywhere
+
+### `utils.py`
+**Only truly shared helpers**
+
+Contains utility functions used across the module:
+- Timing helpers
+- Hashing functions
+- Selector helpers
+- **Rule:** If `utils.py` grows too big, split it into more specific utility modules
+
+## Architecture Principles
+
+1. **Separation of Concerns**: Each file has a single, well-defined responsibility
+2. **Testability**: Components can be tested in isolation
+3. **Configurability**: All tunables are in `config.py`
+4. **Type Safety**: Data models prevent common errors
+5. **Error Handling**: Explicit error types for better debugging
+
